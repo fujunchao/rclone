@@ -12,12 +12,16 @@ jobs:
     runs-on: windows-latest
     
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Setup .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: '6.0.x'
+        
+    - name: Display dotnet version
+      run: dotnet --info
         
     - name: Restore dependencies
       run: dotnet restore RcloneMounter.csproj
@@ -26,10 +30,17 @@ jobs:
       run: dotnet build RcloneMounter.csproj --configuration Release --no-restore
       
     - name: Publish
-      run: dotnet publish RcloneMounter.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+      run: dotnet publish RcloneMounter.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
     
-    - name: Upload artifact
-      uses: actions/upload-artifact@v1
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v2
       with:
-        name: RcloneMounter-Windows
-        path: bin/Release/net6.0-windows/win-x64/publish/ 
+        name: RcloneMounter-${{ github.run_number }}
+        tag_name: v0.1.${{ github.run_number }}
+        draft: false
+        prerelease: false
+        files: |
+          bin/Release/net6.0-windows/win-x64/publish/RcloneMounter.exe
+      env:
+        GITHUB_TOKEN: ${{ github.token }} 
