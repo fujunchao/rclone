@@ -15,6 +15,7 @@ namespace RcloneMounter
         private RcloneService rcloneService;
         private MountPoint currentMountPoint;
         private bool isEditing = false;
+        private Configuration configuration;
 
         public MainWindow()
         {
@@ -28,6 +29,45 @@ namespace RcloneMounter
             LoadConfiguration();
             
             EnableDetailPanel(false);
+            
+            // 注册窗口加载事件
+            this.Loaded += MainWindow_Loaded;
+        }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            // 检查是否已设置Rclone路径
+            if (string.IsNullOrEmpty(rcloneService.RclonePath) || 
+                !File.Exists(rcloneService.RclonePath))
+            {
+                // 如果没有设置Rclone路径，显示提示并打开设置对话框
+                MessageBox.Show("请设置Rclone可执行文件的路径，以便程序正常工作。", 
+                    "需要设置", MessageBoxButton.OK, MessageBoxImage.Information);
+                
+                OpenSettingsDialog();
+            }
+        }
+
+        private void OpenSettingsDialog()
+        {
+            var dialog = new SettingsDialog();
+            dialog.Owner = this;
+            dialog.ShowDialog();
+            
+            // 如果设置对话框关闭后仍未设置Rclone路径，禁用启动按钮
+            if (string.IsNullOrEmpty(rcloneService.RclonePath) || 
+                !File.Exists(rcloneService.RclonePath))
+            {
+                StartButton.IsEnabled = false;
+                
+                // 显示提示信息
+                MessageBox.Show("未设置Rclone路径或路径无效。挂载功能将不可用，直到设置有效的Rclone路径。",
+                    "警告", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            else
+            {
+                StartButton.IsEnabled = true;
+            }
         }
 
         private void LoadConfiguration()
@@ -37,20 +77,37 @@ namespace RcloneMounter
                 if (File.Exists("config.json"))
                 {
                     var json = File.ReadAllText("config.json");
-                    var config = JsonConvert.DeserializeObject<Configuration>(json);
+                    configuration = JsonConvert.DeserializeObject<Configuration>(json);
                     
-                    if (config != null && config.MountPoints != null)
+                    if (configuration != null)
                     {
-                        foreach (var mountPoint in config.MountPoints)
+                        if (configuration.MountPoints != null)
                         {
-                            mountPoints.Add(mountPoint);
+                            foreach (var mountPoint in configuration.MountPoints)
+                            {
+                                mountPoints.Add(mountPoint);
+                            }
+                        }
+                        
+                        if (!string.IsNullOrEmpty(configuration.RclonePath))
+                        {
+                            rcloneService.RclonePath = configuration.RclonePath;
                         }
                     }
+                    else
+                    {
+                        configuration = new Configuration();
+                    }
+                }
+                else
+                {
+                    configuration = new Configuration();
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"加载配置文件时出错：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                configuration = new Configuration();
             }
         }
 
@@ -58,12 +115,15 @@ namespace RcloneMounter
         {
             try
             {
-                var config = new Configuration
+                if (configuration == null)
                 {
-                    MountPoints = new System.Collections.Generic.List<MountPoint>(mountPoints)
-                };
+                    configuration = new Configuration();
+                }
                 
-                var json = JsonConvert.SerializeObject(config, Formatting.Indented);
+                configuration.MountPoints = new System.Collections.Generic.List<MountPoint>(mountPoints);
+                configuration.RclonePath = rcloneService.RclonePath;
+                
+                var json = JsonConvert.SerializeObject(configuration, Formatting.Indented);
                 File.WriteAllText("config.json", json);
             }
             catch (Exception ex)
@@ -194,6 +254,15 @@ namespace RcloneMounter
 
         private async void StartButton_Click(object sender, RoutedEventArgs e)
         {
+            // 检查是否已设置Rclone路径
+            if (string.IsNullOrEmpty(rcloneService.RclonePath) || 
+                !File.Exists(rcloneService.RclonePath))
+            {
+                MessageBox.Show("请先设置Rclone可执行文件路径。", "需要设置", MessageBoxButton.OK, MessageBoxImage.Warning);
+                OpenSettingsDialog();
+                return;
+            }
+            
             if (MountPointListView.SelectedItem is MountPoint selectedMountPoint)
             {
                 try
@@ -276,9 +345,7 @@ namespace RcloneMounter
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
             // 打开设置对话框
-            var dialog = new SettingsDialog();
-            dialog.Owner = this;
-            dialog.ShowDialog();
+            OpenSettingsDialog();
         }
 
         private void AboutButton_Click(object sender, RoutedEventArgs e)

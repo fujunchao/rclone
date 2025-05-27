@@ -19,6 +19,11 @@ namespace RcloneMounter
                 throw new ArgumentNullException(nameof(mountPoint));
             }
             
+            if (string.IsNullOrEmpty(RclonePath) || !File.Exists(RclonePath))
+            {
+                throw new InvalidOperationException("Rclone路径未设置或无效");
+            }
+            
             if (runningProcesses.ContainsKey(mountPoint.Name))
             {
                 throw new InvalidOperationException($"挂载点 '{mountPoint.Name}' 已经在运行中");
@@ -94,7 +99,7 @@ namespace RcloneMounter
             catch (Exception ex)
             {
                 Debug.WriteLine($"挂载时出错: {ex.Message}");
-                return false;
+                throw; // 重新抛出异常以便上层处理
             }
         }
         
@@ -103,6 +108,11 @@ namespace RcloneMounter
             if (mountPoint == null)
             {
                 throw new ArgumentNullException(nameof(mountPoint));
+            }
+            
+            if (string.IsNullOrEmpty(RclonePath) || !File.Exists(RclonePath))
+            {
+                throw new InvalidOperationException("Rclone路径未设置或无效");
             }
             
             if (!runningProcesses.TryGetValue(mountPoint.Name, out var process))
@@ -149,7 +159,7 @@ namespace RcloneMounter
             catch (Exception ex)
             {
                 Debug.WriteLine($"卸载时出错: {ex.Message}");
-                return false;
+                throw; // 重新抛出异常以便上层处理
             }
         }
         
@@ -166,6 +176,16 @@ namespace RcloneMounter
         
         public async Task<bool> CheckRcloneAsync()
         {
+            if (string.IsNullOrEmpty(RclonePath))
+            {
+                return false;
+            }
+            
+            if (!File.Exists(RclonePath))
+            {
+                return false;
+            }
+            
             try
             {
                 var process = new Process();
@@ -174,12 +194,13 @@ namespace RcloneMounter
                 process.StartInfo.UseShellExecute = false;
                 process.StartInfo.CreateNoWindow = true;
                 process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.RedirectStandardError = true;
                 
                 process.Start();
                 string output = await process.StandardOutput.ReadToEndAsync();
                 await process.WaitForExitAsync();
                 
-                return output.Contains("rclone");
+                return output.Contains("rclone") && process.ExitCode == 0;
             }
             catch
             {

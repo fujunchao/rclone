@@ -29,14 +29,24 @@ namespace RcloneMounter
             // 初始化Rclone服务
             rcloneService = new RcloneService();
             
-            // 如果配置中设置了检查Rclone
-            if (configuration != null && configuration.CheckRcloneOnStartup)
+            if (configuration != null && !string.IsNullOrEmpty(configuration.RclonePath))
             {
-                CheckRcloneAsync();
+                rcloneService.RclonePath = configuration.RclonePath;
+                
+                // 如果配置中设置了检查Rclone且已有路径，才进行检查
+                if (configuration.CheckRcloneOnStartup)
+                {
+                    CheckRcloneAsync();
+                }
+                
+                // 自动挂载配置的挂载点
+                AutoMountConfiguredPoints();
             }
-            
-            // 自动挂载配置的挂载点
-            AutoMountConfiguredPoints();
+            else
+            {
+                // 没有rclone配置时，不尝试检查或挂载
+                // 用户需要在UI中设置
+            }
         }
 
         private void LoadConfiguration()
@@ -67,49 +77,57 @@ namespace RcloneMounter
 
         private void InitializeNotifyIcon()
         {
-            notifyIcon = new System.Windows.Forms.NotifyIcon
+            try
             {
-                // 临时使用系统默认图标
-                Icon = System.Drawing.SystemIcons.Application,
-                Visible = true,
-                Text = "Rclone挂载器"
-            };
-            
-            notifyIcon.DoubleClick += (s, e) => 
-            {
-                if (MainWindow != null)
+                notifyIcon = new System.Windows.Forms.NotifyIcon
                 {
-                    MainWindow.WindowState = WindowState.Normal;
-                    MainWindow.Activate();
-                }
-            };
-            
-            var contextMenu = new System.Windows.Forms.ContextMenuStrip();
-            
-            var openMenuItem = new System.Windows.Forms.ToolStripMenuItem
-            {
-                Text = "打开主窗口"
-            };
-            openMenuItem.Click += (s, e) => 
-            {
-                if (MainWindow != null)
+                    // 临时使用系统默认图标
+                    Icon = System.Drawing.SystemIcons.Application,
+                    Visible = true,
+                    Text = "Rclone挂载器"
+                };
+                
+                notifyIcon.DoubleClick += (s, e) => 
                 {
-                    MainWindow.WindowState = WindowState.Normal;
-                    MainWindow.Activate();
-                }
-            };
-            
-            var exitMenuItem = new System.Windows.Forms.ToolStripMenuItem
+                    if (MainWindow != null)
+                    {
+                        MainWindow.WindowState = WindowState.Normal;
+                        MainWindow.Activate();
+                    }
+                };
+                
+                var contextMenu = new System.Windows.Forms.ContextMenuStrip();
+                
+                var openMenuItem = new System.Windows.Forms.ToolStripMenuItem
+                {
+                    Text = "打开主窗口"
+                };
+                openMenuItem.Click += (s, e) => 
+                {
+                    if (MainWindow != null)
+                    {
+                        MainWindow.WindowState = WindowState.Normal;
+                        MainWindow.Activate();
+                    }
+                };
+                
+                var exitMenuItem = new System.Windows.Forms.ToolStripMenuItem
+                {
+                    Text = "退出"
+                };
+                exitMenuItem.Click += (s, e) => Shutdown();
+                
+                contextMenu.Items.Add(openMenuItem);
+                contextMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+                contextMenu.Items.Add(exitMenuItem);
+                
+                notifyIcon.ContextMenuStrip = contextMenu;
+            }
+            catch (Exception ex)
             {
-                Text = "退出"
-            };
-            exitMenuItem.Click += (s, e) => Shutdown();
-            
-            contextMenu.Items.Add(openMenuItem);
-            contextMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-            contextMenu.Items.Add(exitMenuItem);
-            
-            notifyIcon.ContextMenuStrip = contextMenu;
+                // 如果无法初始化托盘图标，记录错误但不阻止应用程序启动
+                Console.WriteLine($"初始化托盘图标时出错: {ex.Message}");
+            }
         }
 
         private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)

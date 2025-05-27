@@ -10,6 +10,7 @@ namespace RcloneMounter
     {
         private RcloneService rcloneService;
         private Configuration configuration;
+        private bool rclonePathChanged = false;
 
         public SettingsDialog()
         {
@@ -17,6 +18,43 @@ namespace RcloneMounter
             
             rcloneService = new RcloneService();
             LoadConfiguration();
+            
+            // 尝试自动查找rclone路径
+            if (string.IsNullOrEmpty(RclonePathTextBox.Text))
+            {
+                TryAutoDetectRclone();
+            }
+        }
+
+        private void TryAutoDetectRclone()
+        {
+            try
+            {
+                // 尝试在常见位置查找rclone.exe
+                string[] commonPaths = new string[]
+                {
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "rclone", "rclone.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "rclone", "rclone.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "rclone", "rclone.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "rclone", "rclone.exe"),
+                    "C:\\rclone\\rclone.exe"
+                };
+
+                foreach (string path in commonPaths)
+                {
+                    if (File.Exists(path))
+                    {
+                        RclonePathTextBox.Text = path;
+                        rclonePathChanged = true;
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 忽略自动检测中的错误
+                Console.WriteLine($"自动检测rclone时出错: {ex.Message}");
+            }
         }
 
         private void LoadConfiguration()
@@ -35,7 +73,10 @@ namespace RcloneMounter
                         AutoStartCheckBox.IsChecked = configuration.AutoStartWithWindows;
                         CheckRcloneCheckBox.IsChecked = configuration.CheckRcloneOnStartup;
                         
-                        rcloneService.RclonePath = configuration.RclonePath;
+                        if (!string.IsNullOrEmpty(configuration.RclonePath))
+                        {
+                            rcloneService.RclonePath = configuration.RclonePath;
+                        }
                     }
                     else
                     {
@@ -59,17 +100,25 @@ namespace RcloneMounter
             var openFileDialog = new OpenFileDialog
             {
                 Filter = "可执行文件 (*.exe)|*.exe|所有文件 (*.*)|*.*",
-                Title = "选择Rclone可执行文件"
+                Title = "选择Rclone可执行文件",
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
             };
             
             if (openFileDialog.ShowDialog() == true)
             {
                 RclonePathTextBox.Text = openFileDialog.FileName;
+                rclonePathChanged = true;
             }
         }
 
         private async void TestRcloneButton_Click(object sender, RoutedEventArgs e)
         {
+            if (string.IsNullOrEmpty(RclonePathTextBox.Text))
+            {
+                MessageBox.Show("请先选择Rclone可执行文件路径", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             try
             {
                 TestRcloneButton.IsEnabled = false;
@@ -81,6 +130,7 @@ namespace RcloneMounter
                 if (isAvailable)
                 {
                     MessageBox.Show("Rclone测试成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                    rclonePathChanged = true;
                 }
                 else
                 {
@@ -103,6 +153,11 @@ namespace RcloneMounter
             try
             {
                 // 更新配置
+                if (configuration == null)
+                {
+                    configuration = new Configuration();
+                }
+                
                 configuration.RclonePath = RclonePathTextBox.Text;
                 configuration.MinimizeToTray = MinimizeToTrayCheckBox.IsChecked ?? true;
                 configuration.AutoStartWithWindows = AutoStartCheckBox.IsChecked ?? false;
@@ -114,6 +169,12 @@ namespace RcloneMounter
                 
                 // 更新注册表（开机自启动）
                 UpdateStartupRegistry();
+                
+                // 更新rclone服务的路径
+                if (rclonePathChanged && !string.IsNullOrEmpty(RclonePathTextBox.Text))
+                {
+                    rcloneService.RclonePath = RclonePathTextBox.Text;
+                }
                 
                 DialogResult = true;
                 Close();
